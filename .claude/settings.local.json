@@ -27,7 +27,11 @@
       "Bash(grep -nE \"#[0-9a-fA-F]{3,6}\" app/globals.css)",
       "Bash(grep -nA3 \"^.mini-tile {\" app/globals.css)",
       "Bash(grep -nA4 \"\\\\.mini-tile {\" app/globals.css)",
-      "Bash(awk *)"
+      "Bash(awk *)",
+      "WebSearch",
+      "Bash(curl -s -m 20 -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://nadan11111-wordle.hf.space/health)",
+      "Bash(curl -s -m 20 https://nadan11111-wordle.hf.space/health)",
+      "Bash(curl -s -m 20 -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://nadan11111-wordle.hf.space/)"
     ]
   }
 }

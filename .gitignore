@@ -1,4 +1,5 @@
 # ---- Frontend (Next.js) ----
+.next/
 FE/node_modules/
 FE/.next/
 FE/out/

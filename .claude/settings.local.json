@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(pkill -f \"node server.js\")",
+      "Bash(PORT=3100 node server.js)",
+      "Bash(pkill -f \"socket-server.js\")",
+      "Bash(CLIENT_ORIGIN=\"https://example.vercel.app\" PORT=4100 node socket-server.js)",
+      "Bash(curl -s http://localhost:4100/health)",
+      "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://localhost:4100/)",
+      "Bash(curl -s http://localhost:3100/api/define/__TRACKED_VAR__)",
+      "Bash(python3 -m pip --version)",
+      "Bash(python3 -c ' *)",
+      "Bash(mv app *)",
+      "Bash(mv package.json next.config.js jsconfig.json FE/)",
+      "Bash(mv node_modules FE/node_modules)",
+      "Bash(mv package-lock.json FE/)",
+      "Bash(rm -f server.js socket-server.js)",
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(rm -f /tmp/be-test.js /tmp/be.log /tmp/wordle-dev.log)",
+      "Bash(grep -rn '\"/api/define\\\\|`/api/define\\\\|\\(/api/define' FE/app)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('game.py'\\).read\\(\\)\\); print\\('game.py OK'\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('main.py OK'\\)\")",
+      "Bash(npx next *)",
+      "Bash(python3 *)",
+      "Bash(grep -nE \"#[0-9a-fA-F]{3,6}\" app/globals.css)",
+      "Bash(grep -nA3 \"^.mini-tile {\" app/globals.css)",
+      "Bash(grep -nA4 \"\\\\.mini-tile {\" app/globals.css)",
+      "Bash(awk *)"
+    ]
+  }
+}

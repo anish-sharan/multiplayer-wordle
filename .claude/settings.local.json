@@ -32,7 +32,8 @@
       "Bash(curl -s -m 20 -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://nadan11111-wordle.hf.space/health)",
       "Bash(curl -s -m 20 https://nadan11111-wordle.hf.space/health)",
       "Bash(curl -s -m 20 -o /dev/null -w \"HTTP %{http_code}\\\\n\" https://nadan11111-wordle.hf.space/)",
-      "Bash(curl -s -m 20 -w \"\\\\nHTTP %{http_code}\\\\n\" \"https://nadan11111-wordle.hf.space/socket.io/?EIO=4&transport=polling\")"
+      "Bash(curl -s -m 20 -w \"\\\\nHTTP %{http_code}\\\\n\" \"https://nadan11111-wordle.hf.space/socket.io/?EIO=4&transport=polling\")",
+      "Bash(NODE_PATH=/home/anish/Desktop/Code/React-And-Native/wordle/FE/node_modules node *)"
     ]
   }
 }

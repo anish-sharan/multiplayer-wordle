@@ -486,15 +486,23 @@ export default function Room() {
       {showConfetti && <Confetti />}
 
       <div className="game-layout">
-        <div className="main-col">
+        <div
+          className="main-col"
+          style={{ "--cols": wordLength, "--rows": state.maxGuesses }}
+        >
           {isCoop && isPlaying && (
             <div className="status-line">
               <span>
                 {guessesLeft} {guessesLeft === 1 ? "guess" : "guesses"} left — solve it together
               </span>
-              {state.draft && state.typingBy && (
-                <span className="typing-indicator">✏️ {state.typingBy} is typing…</span>
-              )}
+              {/* Always render the row so the board doesn't jump as the
+                  indicator toggles on each keystroke; just hide it when idle. */}
+              <span
+                className="typing-indicator"
+                style={{ visibility: state.draft && state.typingBy ? "visible" : "hidden" }}
+              >
+                ✏️ {state.typingBy || " "} is typing…
+              </span>
             </div>
           )}
           {isSolo && isPlaying && (
@@ -630,12 +638,15 @@ function Chat({ messages, onSend, meId }) {
         {messages.length === 0 ? (
           <p className="help-text">No messages yet. Say hi! 👋</p>
         ) : (
-          messages.map((m) => (
-            <div className={`chat-msg ${m.senderId === meId ? "own" : ""}`} key={m.id}>
-              <span className="chat-name">{m.name}</span>
-              <span className="chat-text">{m.text}</span>
-            </div>
-          ))
+          messages.map((m) => {
+            const own = m.senderId === meId;
+            return (
+              <div className={`chat-msg ${own ? "own" : ""}`} key={m.id}>
+                {!own && <span className="chat-name">{m.name}</span>}
+                <span className="chat-bubble">{m.text}</span>
+              </div>
+            );
+          })
         )}
       </div>
       <form className="chat-form" onSubmit={submit}>

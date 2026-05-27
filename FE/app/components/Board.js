@@ -19,10 +19,12 @@ function Row({ letters = "", result, wordLength = 5, isCurrent, shake }) {
     const state = result ? result[i] : null;
     tiles.push(<Tile key={i} ch={ch} state={state} col={i} />);
   }
+  // repeat()'s count must be a literal integer (a CSS var there is invalid and
+  // collapses the grid), so set the count inline; the track size is --tile.
   return (
     <div
       className={`row ${isCurrent && shake ? "shake" : ""}`}
-      style={{ gridTemplateColumns: `repeat(${wordLength}, 1fr)` }}
+      style={{ gridTemplateColumns: `repeat(${wordLength}, var(--tile))` }}
     >
       {tiles}
     </div>
@@ -58,5 +60,12 @@ export default function Board({
       rows.push(<Row key={i} letters="" wordLength={wordLength} />);
     }
   }
-  return <div className="board">{rows}</div>;
+  return (
+    <div
+      className="board"
+      style={{ gridTemplateRows: `repeat(${maxGuesses}, var(--tile))` }}
+    >
+      {rows}
+    </div>
+  );
 }

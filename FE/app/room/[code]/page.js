@@ -10,6 +10,7 @@ import WordMeaning from "@/app/components/WordMeaning";
 import HowToPlay from "@/app/components/HowToPlay";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import Confetti from "@/app/components/Confetti";
+import { getStreak, recordLoss, recordWin } from "@/app/lib/streak";
 
 function aggregateLetterStates(guesses) {
   const states = {};
@@ -48,6 +49,9 @@ export default function Room() {
   const [hintsLeft, setHintsLeft] = useState(2);
   const [cooldown, setCooldown] = useState(0); // versus hint penalty (seconds)
   const prevStatusRef = useRef(null);
+  const [resultsPhase, setResultsPhase] = useState("hidden"); // "hidden" | "open" | "closing"
+  const [streak, setStreak] = useState(() => getStreak());
+  const streakRecordedRef = useRef(false);
 
   const currentRef = useRef("");
   const toastTimer = useRef(null);
@@ -105,6 +109,13 @@ export default function Room() {
     };
     socket.on("hint", onHint);
 
+    // Another player destroyed the room — bail out to home.
+    const onRoomDestroyed = () => {
+      setMessages([]);
+      router.push("/");
+    };
+    socket.on("roomDestroyed", onRoomDestroyed);
+
     function attemptJoin(name) {
       socket.emit("joinRoom", { code, name }, (res) => {
         if (!res?.ok) setJoinError(res?.error || "Could not join room.");
@@ -127,6 +138,7 @@ export default function Room() {
       socket.off("chatHistory", onChatHistory);
       socket.off("chatMessage", onChatMessage);
       socket.off("hint", onHint);
+      socket.off("roomDestroyed", onRoomDestroyed);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
@@ -134,6 +146,12 @@ export default function Room() {
   const sendChat = useCallback((text) => {
     getSocket().emit("chatMessage", { text });
   }, []);
+
+  const leaveRoom = useCallback(() => {
+    getSocket().emit("leaveRoom");
+    setMessages([]);
+    router.push("/");
+  }, [router]);
 
   const mode = state?.mode || "coop";
   const wordLength = state?.wordLength || 5;
@@ -261,6 +279,20 @@ export default function Room() {
     return () => clearTimeout(t);
   }, [state]);
 
+  // Record the solo streak exactly once per finished round. Multiplayer
+  // outcomes depend on others, so we skip them here.
+  useEffect(() => {
+    if (state?.status !== "finished") {
+      streakRecordedRef.current = false;
+      return;
+    }
+    if (streakRecordedRef.current) return;
+    if (!state.solo) return;
+    const self = state.players.find((p) => p.isSelf);
+    streakRecordedRef.current = true;
+    setStreak(self?.solved ? recordWin() : recordLoss());
+  }, [state]);
+
   // Reset hints at the start of each new round.
   useEffect(() => {
     const s = state?.status;
@@ -271,6 +303,16 @@ export default function Room() {
     }
     prevStatusRef.current = s;
   }, [state?.status, state?.maxHints]);
+
+  // Open the results modal when a round finishes. It stays open until the
+  // user dismisses it via the × button (then the board is visible behind).
+  useEffect(() => {
+    if (state?.status !== "finished") {
+      setResultsPhase("hidden");
+      return;
+    }
+    setResultsPhase("open");
+  }, [state?.status]);
 
   // Tick down the versus hint-penalty cooldown.
   useEffect(() => {
@@ -384,7 +426,7 @@ export default function Room() {
   if (state.status === "lobby") {
     return (
       <div className="page">
-        <Header onLeave={() => router.push("/")} />
+        <Header onLeave={leaveRoom} />
         <div className="center-wrap">
           <div className="card">
             <h2>Waiting room</h2>
@@ -481,7 +523,7 @@ export default function Room() {
 
   return (
     <div className="page">
-      <Header onLeave={() => router.push("/")} roomCode={code} mode={mode} solo={isSolo} />
+      <Header onLeave={leaveRoom} roomCode={code} mode={mode} solo={isSolo} streak={streak} />
       {toast && <div className="toast">{toast}</div>}
       {showConfetti && <Confetti />}
 
@@ -510,6 +552,20 @@ export default function Room() {
               <span>
                 {guessesLeft} {guessesLeft === 1 ? "guess" : "guesses"} left
               </span>
+            </div>
+          )}
+          {finished && resultsPhase === "hidden" && (
+            <div className="status-line">
+              <span>
+                The word was <strong>{state.answer}</strong>
+              </span>
+              <button
+                className="btn ghost"
+                style={{ padding: "6px 12px", fontSize: 13 }}
+                onClick={() => setResultsPhase("open")}
+              >
+                View results
+              </button>
             </div>
           )}
           <Board
@@ -577,25 +633,33 @@ export default function Room() {
       </div>
 
       {finished &&
+        resultsPhase !== "hidden" &&
         (isSolo ? (
           <SoloResults
             state={state}
+            streak={streak}
+            closing={resultsPhase === "closing"}
+            onClose={() => setResultsPhase("hidden")}
             onPlayAgain={() => getSocket().emit("startGame")}
-            onLeave={() => router.push("/")}
+            onLeave={leaveRoom}
           />
         ) : isCoop ? (
           <CoopResults
             state={state}
             isHost={isHost}
+            closing={resultsPhase === "closing"}
+            onClose={() => setResultsPhase("hidden")}
             onPlayAgain={() => getSocket().emit("playAgain")}
-            onLeave={() => router.push("/")}
+            onLeave={leaveRoom}
           />
         ) : (
           <VersusResults
             state={state}
             isHost={isHost}
+            closing={resultsPhase === "closing"}
+            onClose={() => setResultsPhase("hidden")}
             onPlayAgain={() => getSocket().emit("playAgain")}
-            onLeave={() => router.push("/")}
+            onLeave={leaveRoom}
           />
         ))}
     </div>
@@ -668,7 +732,7 @@ function Chat({ messages, onSend, meId }) {
   );
 }
 
-function Header({ onLeave, roomCode, mode, solo }) {
+function Header({ onLeave, roomCode, mode, solo, streak }) {
   return (
     <header className="topbar">
       <h1>Wordle</h1>
@@ -681,6 +745,11 @@ function Header({ onLeave, roomCode, mode, solo }) {
               {mode === "versus" ? "Versus" : "Co-op"} · Room {roomCode}
             </span>
           )
+        )}
+        {solo && streak?.current > 0 && (
+          <span className="help-text" title={`Best: ${streak.best}`}>
+            🔥 {streak.current}
+          </span>
         )}
         <ThemeToggle />
         <HowToPlay />
@@ -731,14 +800,15 @@ function CoopSidebar({ state }) {
   );
 }
 
-function SoloResults({ state, onPlayAgain, onLeave }) {
+function SoloResults({ state, streak, closing, onClose, onPlayAgain, onLeave }) {
   const me = state.players.find((p) => p.isSelf) || null;
   const solved = !!me?.solved;
   const attempts = me?.guesses?.length || 0;
   const wins = me?.score || 0;
   return (
-    <div className="overlay">
+    <div className={`overlay${closing ? " closing" : ""}`}>
       <div className="card">
+        <ResultsCloseButton onClose={onClose} />
         <h2>{solved ? "You got it! 🎉" : "Out of guesses 💀"}</h2>
         <p className="answer-reveal">
           The word was <strong>{state.answer}</strong>
@@ -752,6 +822,22 @@ function SoloResults({ state, onPlayAgain, onLeave }) {
           <p className="subtitle" style={{ textAlign: "center" }}>
             🏆 {wins} solved this session.
           </p>
+        )}
+        {streak && (
+          <div className="streak-row">
+            <div className="streak-stat">
+              <span className="streak-num">🔥 {streak.current}</span>
+              <span className="streak-label">Current</span>
+            </div>
+            <div className="streak-stat">
+              <span className="streak-num">🏅 {streak.best}</span>
+              <span className="streak-label">Best</span>
+            </div>
+            <div className="streak-stat">
+              <span className="streak-num">✅ {streak.wins}</span>
+              <span className="streak-label">Wins</span>
+            </div>
+          </div>
         )}
         <WordMeaning word={state.answer} />
         <div className="row-gap">
@@ -767,13 +853,14 @@ function SoloResults({ state, onPlayAgain, onLeave }) {
   );
 }
 
-function CoopResults({ state, isHost, onPlayAgain, onLeave }) {
+function CoopResults({ state, isHost, closing, onClose, onPlayAgain, onLeave }) {
   const won = state.outcome === "won";
   const mvp = state.players.find((p) => p.id === state.mvpId) || null;
   const ordered = [...state.players].sort((a, b) => b.chars - a.chars);
   return (
-    <div className="overlay">
+    <div className={`overlay${closing ? " closing" : ""}`}>
       <div className="card">
+        <ResultsCloseButton onClose={onClose} />
         <h2>{won ? "You solved it together! 🎉" : "Out of guesses 💀"}</h2>
         <p className="answer-reveal">
           The word was <strong>{state.answer}</strong>
@@ -811,7 +898,7 @@ function CoopResults({ state, isHost, onPlayAgain, onLeave }) {
   );
 }
 
-function VersusResults({ state, isHost, onPlayAgain, onLeave }) {
+function VersusResults({ state, isHost, closing, onClose, onPlayAgain, onLeave }) {
   const ordered = [...state.players].sort((a, b) => {
     if (a.solved && b.solved) return a.rank - b.rank;
     if (a.solved) return -1;
@@ -821,8 +908,9 @@ function VersusResults({ state, isHost, onPlayAgain, onLeave }) {
   const winner = state.players.find((p) => p.id === state.winnerId);
 
   return (
-    <div className="overlay">
+    <div className={`overlay${closing ? " closing" : ""}`}>
       <div className="card">
+        <ResultsCloseButton onClose={onClose} />
         <h2>{winner ? `${winner.name} wins! 🏆` : "Round over"}</h2>
         <p className="answer-reveal">
           The word was <strong>{state.answer}</strong>
@@ -856,6 +944,20 @@ function VersusResults({ state, isHost, onPlayAgain, onLeave }) {
         <FinishButtons isHost={isHost} onPlayAgain={onPlayAgain} onLeave={onLeave} />
       </div>
     </div>
+  );
+}
+
+function ResultsCloseButton({ onClose }) {
+  if (!onClose) return null;
+  return (
+    <button
+      type="button"
+      className="results-close"
+      aria-label="Close results and view board"
+      onClick={onClose}
+    >
+      ×
+    </button>
   );
 }
 

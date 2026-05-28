@@ -537,6 +537,21 @@ def register_handlers(sio):
             p["hints"] = 0
         await broadcast_state(room)
 
+    @sio.on("leaveRoom")
+    async def leave_room(sid):
+        """Tear down the whole room (chat included) and notify everyone."""
+        code = sid_room.pop(sid, None)
+        if not code:
+            return
+        room = rooms.pop(code, None)
+        if not room:
+            return
+        for p in room["players"]:
+            if p["id"] != sid:
+                sid_room.pop(p["id"], None)
+            if p["connected"]:
+                await sio.emit("roomDestroyed", {"code": code}, to=p["id"])
+
     @sio.event
     async def disconnect(sid):
         code = sid_room.pop(sid, None)

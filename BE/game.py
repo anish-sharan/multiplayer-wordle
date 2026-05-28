@@ -22,6 +22,8 @@ from words import (
 MAX_GUESSES = 6
 MAX_PLAYERS = 5                     # per room
 ROOM_TTL_MS = 24 * 60 * 60 * 1000   # rooms (and their chat) expire after 1 day
+EMPTY_ROOM_TTL_MS = 10 * 60 * 1000  # empty rooms get a 10-min grace window so
+                                    # a disconnect/refresh can rejoin the code
 HINT_MAX = 2                        # hints per round
 HINT_COOLDOWN_MS = 5000             # versus-only penalty per hint
 
@@ -43,12 +45,17 @@ def generate_code():
 
 
 def purge_expired_rooms():
-    """Drop rooms (and all their data) inactive for more than ROOM_TTL_MS."""
+    """Drop rooms inactive too long, plus empty rooms past their grace window."""
     now = _now_ms()
-    expired = [
-        code for code, r in list(rooms.items())
-        if now - r.get("lastActivity", now) > ROOM_TTL_MS
-    ]
+    expired = []
+    for code, r in list(rooms.items()):
+        idle_ms = now - r.get("lastActivity", now)
+        if idle_ms > ROOM_TTL_MS:
+            expired.append(code)
+            continue
+        empty_at = r.get("emptyAt")
+        if empty_at and not r["players"] and (now - empty_at) > EMPTY_ROOM_TTL_MS:
+            expired.append(code)
     for code in expired:
         room = rooms.pop(code, None)
         if room:
@@ -73,6 +80,7 @@ def new_room(code):
         "code": code,
         "createdAt": now,
         "lastActivity": now,
+        "emptyAt": now,      # cleared once anyone joins; resets if the room empties
         "status": "lobby",   # "lobby" | "playing" | "finished"
         "mode": "coop",      # "coop" | "versus"
         "wordLength": DEFAULT_LENGTH,  # 4 | 5 | 6, host-chosen in the lobby
@@ -264,9 +272,6 @@ def register_handlers(sio):
 
         player = next((p for p in room["players"] if p["id"] == sid), None)
         if player is None:
-            # Co-op lets you jump in any time; versus is locked once it starts.
-            if room["status"] != "lobby" and room["mode"] == "versus":
-                return {"ok": False, "error": "That versus game is already in progress."}
             if len(room["players"]) >= MAX_PLAYERS:
                 return {"ok": False, "error": f"Room is full (max {MAX_PLAYERS} players)."}
             player = new_player(sid, name)
@@ -278,6 +283,7 @@ def register_handlers(sio):
         if not room["hostId"]:
             room["hostId"] = sid
         refresh_host_flags(room)
+        room["emptyAt"] = None  # has at least one player now
 
         sid_room[sid] = code
         await broadcast_state(room)
@@ -565,7 +571,24 @@ def register_handlers(sio):
             return
         room["players"].pop(idx)
         if not room["players"]:
-            rooms.pop(code, None)
+            # Don't kill the room yet — a refresh / brief disconnect should be
+            # able to find it again. purge_expired_rooms drops it after the
+            # EMPTY_ROOM_TTL_MS grace window. Reset back to the lobby so the
+            # rejoiner isn't locked out by the in-progress-versus check, and
+            # clear the (now-stale) hostId so whoever lands first becomes host.
+            room["emptyAt"] = _now_ms()
+            room["hostId"] = None
+            room["status"] = "lobby"
+            room["word"] = None
+            room["guesses"] = []
+            room["draft"] = ""
+            room["draftAuthors"] = []
+            room["typingBy"] = None
+            room["outcome"] = None
+            room["mvpId"] = None
+            room["winnerId"] = None
+            room["solveCount"] = 0
+            room["hintsUsed"] = 0
             return
         if room["hostId"] == sid:
             room["hostId"] = room["players"][0]["id"]

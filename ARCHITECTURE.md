@@ -41,7 +41,7 @@ flowchart LR
         NEXT["Next.js App Router<br/>(static + client components)"]
     end
 
-    subgraph Render["Render — Backend (BE/)"]
+    subgraph HFSpaces["Hugging Face Spaces — Backend (BE/)"]
         ASGI["socketio.ASGIApp (main.py)"]
         SIO["AsyncServer<br/>game.py handlers"]
         API["FastAPI HTTP<br/>/health · /api/define/&lt;word&gt;"]
@@ -60,9 +60,13 @@ flowchart LR
 ```
 
 **Why two services?** Vercel is serverless and can't hold a long-lived WebSocket
-server, so the realtime FastAPI + Socket.IO backend lives on Render while the
-Next.js frontend is served from Vercel. The client finds the backend through the
-`NEXT_PUBLIC_BACKEND_URL` env var (defaults to `http://localhost:8000`).
+server, so the realtime FastAPI + Socket.IO backend runs as a Docker Space on
+Hugging Face Spaces while the Next.js frontend is served from Vercel. The
+client finds the backend through the `NEXT_PUBLIC_BACKEND_URL` env var
+(defaults to `http://localhost:8000`). The deployed Space is
+[`Nadan11111/wordle`](https://huggingface.co/spaces/Nadan11111/wordle),
+serving on `https://nadan11111-wordle.hf.space`; the live frontend is at
+<https://multiplayer-wordle-pied.vercel.app/>.
 
 ### Realtime request shape
 
@@ -107,12 +111,13 @@ FE/  (Next.js App Router — deploy to Vercel)
 ├── app/lib/socket.js            Single shared Socket.IO client (getSocket())
 └── app/lib/config.js            Reads NEXT_PUBLIC_BACKEND_URL
 
-BE/  (FastAPI + python-socketio — deploy to Render)
+BE/  (FastAPI + python-socketio — deploy to Hugging Face Spaces)
 ├── main.py                      FastAPI app, CORS, /health, /api/define proxy,
 │                                and the socketio.ASGIApp entrypoint
 ├── game.py                      All game logic: rooms, players, Socket.IO
 │                                handlers, scoring, state broadcasting
-└── words.py                     Curated 4/5/6-letter word lists + Wordle scoring
+├── words.py                     Curated 4/5/6-letter word lists + Wordle scoring
+└── Dockerfile                   Container image used by HF Spaces (port 7860)
 ```
 
 ---

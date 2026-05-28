@@ -53,6 +53,13 @@ export default function Room() {
   const [streak, setStreak] = useState(() => getStreak());
   const streakRecordedRef = useRef(false);
 
+  // useState's initializer runs during SSR (where window/localStorage is
+  // undefined) and React reuses that on hydration — so on a hard reload the
+  // initial streak would always read as 0. Re-sync from localStorage on mount.
+  useEffect(() => {
+    setStreak(getStreak());
+  }, []);
+
   const currentRef = useRef("");
   const toastTimer = useRef(null);
   const soloStartedRef = useRef(false);
@@ -280,17 +287,22 @@ export default function Room() {
   }, [state]);
 
   // Record the solo streak exactly once per finished round. Multiplayer
-  // outcomes depend on others, so we skip them here.
+  // outcomes depend on others, but the round still counts as a win/loss
+  // from your perspective.
   useEffect(() => {
     if (state?.status !== "finished") {
       streakRecordedRef.current = false;
       return;
     }
     if (streakRecordedRef.current) return;
-    if (!state.solo) return;
     const self = state.players.find((p) => p.isSelf);
+    if (!self) return;
+    // Personal streak: count anyone who solved their own board as a win.
+    // (In versus, this means solving counts even if you weren't first.)
+    const won =
+      state.mode === "coop" ? state.outcome === "won" : !!self.solved;
     streakRecordedRef.current = true;
-    setStreak(self?.solved ? recordWin() : recordLoss());
+    setStreak(won ? recordWin() : recordLoss());
   }, [state]);
 
   // Reset hints at the start of each new round.
@@ -746,7 +758,7 @@ function Header({ onLeave, roomCode, mode, solo, streak }) {
             </span>
           )
         )}
-        {solo && streak?.current > 0 && (
+        {streak?.current > 0 && (
           <span className="help-text" title={`Best: ${streak.best}`}>
             🔥 {streak.current}
           </span>

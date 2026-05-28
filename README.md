@@ -1,11 +1,14 @@
 # Multiplayer Wordle
 
+**Play:** https://multiplayer-wordle-pied.vercel.app/
+**Backend Space:** https://huggingface.co/spaces/Nadan11111/wordle
+
 Real-time multiplayer Wordle with a **Next.js frontend** and a **FastAPI backend**,
 split into two folders:
 
 ```
 FE/   Next.js (App Router) frontend          → deploy to Vercel
-BE/   FastAPI + python-socketio backend       → deploy to Render
+BE/   FastAPI + python-socketio backend       → deploy to Hugging Face Spaces
 ```
 
 Two game modes the host picks in the lobby:
@@ -60,30 +63,44 @@ for the backend, so no env file is needed locally. Enter a name, **Create a
 room**, pick a mode, and share the code. Open a second browser tab to test
 multiplayer.
 
-## Deployment (Vercel + Render)
+## Deployment (Vercel + Hugging Face Spaces)
 
 Vercel is serverless and can't run a persistent WebSocket server, so the
-FastAPI backend runs on Render and the Next.js frontend on Vercel.
+FastAPI backend runs on Hugging Face Spaces (Docker SDK) and the Next.js
+frontend on Vercel.
 
-### 1. Backend → Render
+### 1. Backend → Hugging Face Spaces
 
-Create a **Web Service** from this repo (or use the included `render.yaml`):
+Create a new **Space** with the **Docker** SDK and push the contents of `BE/`
+to it (the included `BE/Dockerfile` already exposes port `7860`, which is what
+Spaces routes to by default).
 
 | Setting | Value |
 | --- | --- |
-| Root directory | `BE` |
-| Runtime | Python |
-| Build command | `pip install -r requirements.txt` |
-| Start command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
-| Health check path | `/health` |
+| SDK | Docker |
+| Hardware | CPU basic is enough |
+| App port | `7860` (set by `Dockerfile`) |
+| Visibility | Public |
 
-Once you have your Vercel URL, set the env var:
+Easiest sync flow: add the Space as a remote to a Git checkout of `BE/` and
+push, e.g.
+
+```bash
+cd BE
+git init && git add . && git commit -m "Initial backend"
+git remote add space https://huggingface.co/spaces/Nadan11111/wordle
+git push space main
+```
+
+In the Space's **Settings → Variables and secrets**, add:
 
 ```
-CLIENT_ORIGIN = https://your-wordle.vercel.app
+CLIENT_ORIGIN = https://multiplayer-wordle-pied.vercel.app
 ```
 
-Render gives you a URL like `https://wordle-api.onrender.com`.
+The Space URL looks like `https://<user>-<space-name>.hf.space`. For this
+deployment that's `https://nadan11111-wordle.hf.space` — use that as the
+backend URL for the frontend.
 
 ### 2. Frontend → Vercel
 
@@ -91,15 +108,16 @@ Import the repo into Vercel and set the **Root Directory** to `FE`
 (it auto-detects Next.js). Add one environment variable:
 
 ```
-NEXT_PUBLIC_BACKEND_URL = https://wordle-api.onrender.com
+NEXT_PUBLIC_BACKEND_URL = https://nadan11111-wordle.hf.space
 ```
 
-Redeploy so it's baked into the client build, then point Render's
+Redeploy so it's baked into the client build, then point the Space's
 `CLIENT_ORIGIN` at your final Vercel URL.
 
-> **Render free tier:** the service sleeps after ~15 min of inactivity, so the
-> first connection (and first definition lookup) after idle can take ~30–60s to
-> wake. In-memory game state resets whenever the service restarts. An uptime
+> **Hugging Face Spaces free tier:** the Space sleeps after ~48h of inactivity
+> (and within shorter windows depending on traffic), so the first connection
+> and first definition lookup after idle can take ~30–60s to wake.
+> In-memory game state resets whenever the Space rebuilds or sleeps. An uptime
 > pinger on `/health` keeps it warm.
 >
 > **Vercel:** the Hobby tier is for non-commercial use — check the plan terms
@@ -119,9 +137,10 @@ BE/
   main.py                   FastAPI app + Socket.IO mount + /api/define proxy
   game.py                   Game logic (co-op + versus) + in-memory rooms
   words.py                  Word list + Wordle scoring (duplicate-letter safe)
+  Dockerfile                Container image (used by Hugging Face Spaces)
   requirements.txt
 
-render.yaml                 Render Blueprint for the backend
+render.yaml                 Optional Render Blueprint (alternative host)
 ```
 
 ## Notes
